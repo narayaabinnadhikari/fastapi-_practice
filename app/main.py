@@ -1,12 +1,26 @@
 from typing import Optional
-from fastapi import FastAPI, Response, status, HTTPException
+from fastapi import FastAPI, Response, status, HTTPException, Depends
 from fastapi.params import Body
 from pydantic import BaseModel
 from random import randrange
 import psycopg
 from psycopg.rows import dict_row
+import time
+from . import models
+from .database import engine, SessionLocal
+from sqlalchemy.orm import Session
+
+models.Base.metadata.create_all(bind= engine) 
 
 app = FastAPI()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 class Post(BaseModel):
     title: str
@@ -35,7 +49,7 @@ def find_posts(id):
     for p in my_posts:
         if p['id'] == id:
             return p
-        
+
 def find_index_post(id):
     for i, p in enumerate(my_posts):
         if p['id'] == id:
@@ -52,7 +66,9 @@ async def get_posts():
     posts = cursor.fetchall()
     return{"data ": posts }
     
-
+@app.get("/sqlalchemy")
+async def test_posts(db: Session = Depends(get_db)):
+    return{"Status" :  "Success"}
 
 @app.post("/posts", status_code = status.HTTP_201_CREATED)
 async def create_posts(post: Post):
@@ -79,7 +95,7 @@ async def delete_post(id: int):
     deleted_post = cursor.fetchone()
     conn.commit()
 
-    if deleted_post == None:
+    if deleted_post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Post with id {id} doesn't exist")
 
     return  Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -91,7 +107,7 @@ async def update_post(id: int, post: Post):
     updated_post = cursor.fetchone()
     conn.commit()
 
-    if updated_post == None:
+    if updated_post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Post with id {id} doesn't exist")
     
     
