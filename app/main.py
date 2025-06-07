@@ -63,33 +63,37 @@ async def create_posts(post: Post):
 
 
 @app.get("/posts/{id}")
-async def get_post(id: int, response: Response):
-    cursor.execute(""" select * from posts where id = %s """, (id))
-    test_post = cursor.fetchone()
-    print(test_post)
-   
-    return {"here": post}
+async def get_post(id: int):
+    cursor.execute(""" select * from posts where id = %s """, [str(id)])
+    # you will run into issue if you only put (str(id)) in above code. You have to put (str(id),) or [str(id)] for the psycopg to properly parse the id. You don't even have to do str, you can just write (id), or [id]. Because psycopg expects a tuple or a list. without comma it won't be a tuple.
+    post = cursor.fetchone()
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} was not found")
+
+    return {"post_details" : post }
 
 
 @app.delete("/posts/{id}", status_code= status.HTTP_204_NO_CONTENT)
 async def delete_post(id: int):
-    index = find_index_post(id)
-    if index == None:
+    cursor.execute(""" delete from posts where id = %s returning * """, (id,))
+    deleted_post = cursor.fetchone()
+    conn.commit()
+
+    if deleted_post == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Post with id {id} doesn't exist")
 
-    my_posts.pop(index)
-    return { Response(status_code=status.HTTP_204_NO_CONTENT)}
+    return  Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.put("/posts/{id}")
 async def update_post(id: int, post: Post):
-    index = find_index_post(id)
+    cursor.execute(""" update posts set title = %s, content = %s, published = %s where id = %s returning * """, (post.title, post.content, post.published, id))
+    updated_post = cursor.fetchone()
+    conn.commit()
 
-    if index == None:
+    if updated_post == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Post with id {id} doesn't exist")
     
-    post_dict = post.model_dump()
-    print(post_dict)
-    post_dict['id'] = id
-    my_posts[index] = post_dict
-    return{"data": post_dict}
+    
+    
+    return{"data": updated_post}
