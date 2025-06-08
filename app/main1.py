@@ -1,3 +1,4 @@
+# Code with pure SQL Before sqlalchemy and its models were fully implemented.
 from typing import Optional
 from fastapi import FastAPI, Response, status, HTTPException, Depends
 from fastapi.params import Body
@@ -5,7 +6,6 @@ from pydantic import BaseModel
 from random import randrange
 import psycopg
 from psycopg.rows import dict_row
-import time
 from . import models
 from .database import engine, get_db
 from sqlalchemy.orm import Session
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 models.Base.metadata.create_all(bind= engine) 
 
 app = FastAPI()
+
 
 class Post(BaseModel):
     title: str
@@ -52,27 +53,21 @@ async def root():
     return {"message": "Welcome to my api."}
 
 
+@app.get("/posts")
+async def get_posts():
+    cursor.execute(""" SELECT * FROM posts""")
+    posts = cursor.fetchall()
+    return{"data ": posts }
+    
 @app.get("/sqlalchemy")
 async def test_posts(db: Session = Depends(get_db)):
-    posts = db.query(models.Post).all()
-    return{"data" :  posts}
-
-
-@app.get("/posts")
-async def get_posts(db: Session = Depends(get_db)):
-
-    posts = db.query(models.Post).all()
-    return{"data" :  posts}
-    
+    return{"Status" :  "Success"}
 
 @app.post("/posts", status_code = status.HTTP_201_CREATED)
-async def create_posts(post: Post, db: Session = Depends(get_db)):
-    new_post = models.Post(**post.model_dump())
-    # this below code way the long way of doing the same.
-    # new_post = models.Post(title = post.title, content = post.content, published = post.published)
-    db.add(new_post)
-    db.commit()
-    db.refresh(new_post)
+async def create_posts(post: Post):
+    cursor.execute(""" insert into posts (title, content, published) values (%s, %s, %s) returning * """, (post.title, post.content, post.published ))
+    new_post = cursor.fetchone()
+    conn.commit()
     return {"data": new_post}
 
 
