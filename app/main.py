@@ -1,16 +1,13 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import FastAPI, Response, status, HTTPException, Depends
 from fastapi.encoders import jsonable_encoder
 from fastapi.params import Body
 from fastapi.responses import JSONResponse
-import psycopg.rows
-from pydantic import BaseModel
 from random import randrange
 import psycopg
 from psycopg.rows import dict_row
-import time
 import pprint
-from . import models
+from . import models, schemas
 from .database import engine, get_db
 from sqlalchemy.orm import Session
 
@@ -18,14 +15,9 @@ models.Base.metadata.create_all(bind= engine)
 
 app = FastAPI()
 
-class Post(BaseModel):
-    title: str
-    content: str
-    published: bool = True
-
 while True:
     try:
-        conn = psycopg.connect(host='localhost', dbname='fastapi', user='postgres', password='Com1par', row_factory= dict_row)
+        conn = psycopg.connect(host='localhost', dbname='fastapi', user='postgres', password='Com1par', row_factory= dict_row) # type: ignore
         cursor = conn.cursor()
         print("DB connection was a Success.")
         break
@@ -55,39 +47,30 @@ def find_index_post(id):
 async def root():
     return {"message": "Welcome to my api."}
 
-
-@app.get("/sqlalchemy")
-async def test_posts(db: Session = Depends(get_db)):
-    posts = db.query(models.Post).all()
-    return{"data" :  posts}
-
-
-@app.get("/posts")
+@app.get("/posts", response_model=List[schemas.PostResponse])
 async def get_posts(db: Session = Depends(get_db)):
-
     posts = db.query(models.Post).all()
-    return{"data" :  posts}
+    return posts
     
-
-@app.post("/posts", status_code = status.HTTP_201_CREATED)
-async def create_posts(post: Post, db: Session = Depends(get_db)):
+@app.post("/posts", status_code = status.HTTP_201_CREATED, response_model=schemas.PostResponse)
+async def create_posts(post: schemas.PostCreate, db: Session = Depends(get_db)):
     new_post = models.Post(**post.model_dump())
     # this below code way the long way of doing the same.
     # new_post = models.Post(title = post.title, content = post.content, published = post.published)
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
-    return {"data": new_post}
+    return new_post
 
 
-@app.get("/posts/{id}")
+@app.get("/posts/{id}", response_model=schemas.PostResponse)
 async def get_post(id: int, db: Session = Depends(get_db)):
     post = db.query(models.Post).filter(models.Post.id == id).first()
     print(post)
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} was not found")
 
-    return {'post_details' : post}
+    return post
 
 
 
@@ -103,14 +86,23 @@ async def delete_post(id: int, db: Session = Depends(get_db)):
     return  Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@app.put("/posts/{id}", status_code=status.HTTP_200_OK)
-async def update_post(id: int, updated_post: Post, db: Session = Depends(get_db)):
+@app.put("/posts/{id}", response_model=schemas.PostResponse, status_code=status.HTTP_200_OK)
+async def update_post(id: int, updated_post: schemas.PostCreate, db: Session = Depends(get_db)):
     post_query = db.query(models.Post).filter(models.Post.id == id)
     post = post_query.first()
 
     if  post == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Post with id {id} doesn't exist")
     
-    post_query.update(updated_post.model_dump(), synchronize_session=False)
+    post_query.update(updated_post.model_dump(), synchronize_session=False) # type: ignore
     db.commit()
-    return{"data": post_query.first()}
+    return post_query.first()
+
+@app.post("/users", status_code = status.HTTP_201_CREATED, response_model=schemas.UserOut)
+async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    new_user = models.User(**user.model_dump())
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
