@@ -7,7 +7,7 @@ from random import randrange
 import psycopg
 from psycopg.rows import dict_row
 import pprint
-from . import models, schemas
+from . import models, schemas, utils
 from .database import engine, get_db
 from sqlalchemy.orm import Session
 
@@ -100,6 +100,12 @@ async def update_post(id: int, updated_post: schemas.PostCreate, db: Session = D
 
 @app.post("/users", status_code = status.HTTP_201_CREATED, response_model=schemas.UserOut)
 async def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+
+    #hashing the password from user.password
+    #hashed_pwd = pwd_context.hash(user.password)
+    hashed_password = utils.hash(user.password)
+    user.password = hashed_password
+
     new_user = models.User(**user.model_dump())
     db.add(new_user)
     db.commit()
